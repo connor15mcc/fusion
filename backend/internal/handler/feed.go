@@ -56,6 +56,10 @@ type appInfoResponse struct {
 	AllowedRefreshIntervals []int64 `json:"allowed_refresh_intervals"`
 }
 
+type refreshFeedsRequest struct {
+	IDs *[]int64 `json:"ids"`
+}
+
 type batchCreateFeedsRequest struct {
 	Feeds []batchCreateFeedItem `json:"feeds" binding:"required"`
 }
@@ -407,42 +411,86 @@ func (h *Handler) refreshFeed(c *gin.Context) {
 }
 
 func (h *Handler) refreshAllFeeds(c *gin.Context) {
-	if !h.tryStartRefreshAll() {
+	var req refreshFeedsRequest
+	hasBody := c.Request.ContentLength != 0
+	if hasBody {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			badRequestError(c, "invalid request")
+			return
+		}
+	}
+
+	if hasBody && req.IDs == nil {
+		badRequestError(c, "invalid ids")
+		return
+	}
+
+	var feedIDs []int64
+	if req.IDs != nil {
+		if len(*req.IDs) == 0 {
+			badRequestError(c, "invalid ids")
+			return
+		}
+
+		seen := make(map[int64]struct{}, len(*req.IDs))
+		unique := make([]int64, 0, len(*req.IDs))
+		for _, id := range *req.IDs {
+			if id <= 0 {
+				badRequestError(c, "invalid ids")
+				return
+			}
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			seen[id] = struct{}{}
+			unique = append(unique, id)
+		}
+		feedIDs = unique
+	}
+
+	if !h.tryStartRefresh() {
 		c.Status(http.StatusAccepted)
 		return
 	}
 
 	// Run in background so the HTTP response returns immediately.
 	go func() {
-		defer h.finishRefreshAll()
+		defer h.finishRefresh()
 
 		ctx, cancel := context.WithTimeout(context.Background(), refreshAllTimeout)
 		defer cancel()
 
-		if count, err := h.puller.RefreshAll(ctx); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-			slog.Warn("refresh all feeds failed", "refreshed", count, "error", err)
+		if len(feedIDs) == 0 {
+			if count, err := h.puller.RefreshAll(ctx); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+				slog.Warn("refresh all feeds failed", "refreshed", count, "error", err)
+			}
+			return
+		}
+
+		if count, err := h.puller.RefreshFeeds(ctx, feedIDs); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			slog.Warn("refresh selected feeds failed", "refreshed", count, "error", err)
 		}
 	}()
 
 	c.Status(http.StatusAccepted)
 }
 
-func (h *Handler) tryStartRefreshAll() bool {
-	h.refreshAllMu.Lock()
-	defer h.refreshAllMu.Unlock()
+func (h *Handler) tryStartRefresh() bool {
+	h.refreshMu.Lock()
+	defer h.refreshMu.Unlock()
 
-	if h.refreshAllRunning {
+	if h.refreshRunning {
 		return false
 	}
 
-	h.refreshAllRunning = true
+	h.refreshRunning = true
 	return true
 }
 
-func (h *Handler) finishRefreshAll() {
-	h.refreshAllMu.Lock()
-	h.refreshAllRunning = false
-	h.refreshAllMu.Unlock()
+func (h *Handler) finishRefresh() {
+	h.refreshMu.Lock()
+	h.refreshRunning = false
+	h.refreshMu.Unlock()
 }
 
 func (h *Handler) batchCreateFeeds(c *gin.Context) {

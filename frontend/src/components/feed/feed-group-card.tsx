@@ -1,16 +1,9 @@
-import { AlertCircle, ChevronDown, ChevronRight, Folder, Pause, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Folder, Pencil, Plus, Trash2 } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
-import { FeedFavicon } from "@/components/feed/feed-favicon";
+import { FeedRow } from "@/components/feed/feed-row";
 import { Input } from "@/components/ui/input";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { getFaviconUrl } from "@/lib/api/favicon";
-import { getFeedErrorPreview } from "@/lib/feed-error";
 import type { TranslationKey } from "@/lib/i18n";
-import { cn, formatDate } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import type { Feed, Group } from "@/lib/api";
 
 interface FeedGroupCardProps {
@@ -21,6 +14,8 @@ interface FeedGroupCardProps {
   editingGroupName: string;
   isMobile: boolean;
   mobileErrorTooltipFeedId: number | null;
+  isSelectionMode: boolean;
+  selectedFeedIds: ReadonlySet<number>;
   onToggleGroup: (groupId: number) => void;
   onStartEditingGroup: (group: Group) => void;
   onChangeEditingGroupName: (value: string) => void;
@@ -29,16 +24,10 @@ interface FeedGroupCardProps {
   onOpenAddFeed: () => void;
   onOpenDeleteGroup: (group: Group) => void;
   onOpenEditFeed: (feed: Feed) => void;
+  onToggleFeedSelection: (feed: Feed, range: boolean) => void;
+  onStartFeedSelection: (feed: Feed) => void;
   onChangeMobileErrorTooltipFeedId: Dispatch<SetStateAction<number | null>>;
   t: (key: TranslationKey, params?: Record<string, string | number>) => string;
-}
-
-function getDomain(url: string) {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return url;
-  }
 }
 
 export function FeedGroupCard({
@@ -49,6 +38,8 @@ export function FeedGroupCard({
   editingGroupName,
   isMobile,
   mobileErrorTooltipFeedId,
+  isSelectionMode,
+  selectedFeedIds,
   onToggleGroup,
   onStartEditingGroup,
   onChangeEditingGroupName,
@@ -57,6 +48,8 @@ export function FeedGroupCard({
   onOpenAddFeed,
   onOpenDeleteGroup,
   onOpenEditFeed,
+  onToggleFeedSelection,
+  onStartFeedSelection,
   onChangeMobileErrorTooltipFeedId,
   t,
 }: FeedGroupCardProps) {
@@ -187,87 +180,20 @@ export function FeedGroupCard({
           {groupFeeds.map((feed, index) => (
             <div
               key={feed.id}
-              className={cn(
-                "flex items-center justify-between py-2.5 pl-8 pr-3.5 transition-colors hover:bg-accent/30 sm:pl-11",
-                index < groupFeeds.length - 1 && "border-b border-border/50",
-              )}
+              className={cn(index < groupFeeds.length - 1 && "border-b border-border/50")}
             >
-              <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                <FeedFavicon
-                  src={getFaviconUrl(feed.link, feed.site_url)}
-                  className="h-5 w-5"
-                />
-                <div className="min-w-0">
-                  <p className="truncate text-[13px] font-medium">{feed.name}</p>
-                  <p className="truncate text-[11px] text-muted-foreground">
-                    {getDomain(feed.link)}
-                  </p>
-                </div>
-              </div>
-              <div className="flex shrink-0 items-center gap-1.5 sm:gap-2.5">
-                {feed.fetch_state.last_error && (
-                  <Tooltip
-                    open={
-                      isMobile
-                        ? mobileErrorTooltipFeedId === feed.id
-                        : undefined
-                    }
-                    onOpenChange={(open) => {
-                      if (!isMobile || open) return;
-                      onChangeMobileErrorTooltipFeedId((current) =>
-                        current === feed.id ? null : current,
-                      );
-                    }}
-                  >
-                    <TooltipTrigger
-                      render={
-                        <button
-                          type="button"
-                          aria-label={t("feeds.status.error")}
-                          onClick={() => {
-                            if (!isMobile) return;
-                            onChangeMobileErrorTooltipFeedId((current) =>
-                              current === feed.id ? null : feed.id,
-                            );
-                          }}
-                          className="flex items-center gap-1 rounded-sm text-xs text-destructive"
-                        />
-                      }
-                    >
-                      <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                      <span className="hidden max-w-56 truncate font-medium sm:inline">
-                        {getFeedErrorPreview(feed.fetch_state.last_error)}
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent
-                      side="top"
-                      className="max-w-sm whitespace-normal break-words"
-                    >
-                      {feed.fetch_state.last_error.trim()}
-                    </TooltipContent>
-                  </Tooltip>
-                )}
-                {feed.suspended && (
-                  <Pause className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                )}
-                <span className="hidden text-xs text-muted-foreground sm:inline">
-                  {t("feeds.itemCount", {
-                    count: feed.item_count,
-                  })}{" "}
-                  ·{" "}
-                  {feed.fetch_state.last_checked_at > 0
-                    ? formatDate(feed.fetch_state.last_checked_at)
-                    : t("common.unknown")}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => onOpenEditFeed(feed)}
-                  className="rounded p-1 hover:bg-accent"
-                  aria-label={t("feed.edit.title")}
-                >
-                  <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                </button>
-              </div>
+              <FeedRow
+                feed={feed}
+                isSelectionMode={isSelectionMode}
+                isChecked={selectedFeedIds.has(feed.id)}
+                isMobile={isMobile}
+                mobileErrorTooltipFeedId={mobileErrorTooltipFeedId}
+                onToggleSelection={onToggleFeedSelection}
+                onStartSelection={onStartFeedSelection}
+                onOpenEditFeed={onOpenEditFeed}
+                onChangeMobileErrorTooltipFeedId={onChangeMobileErrorTooltipFeedId}
+                t={t}
+              />
             </div>
           ))}
         </div>

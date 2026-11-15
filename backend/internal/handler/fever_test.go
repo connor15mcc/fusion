@@ -18,6 +18,8 @@ type noopPuller struct{}
 
 func (noopPuller) RefreshFeed(context.Context, int64) error { return nil }
 
+func (noopPuller) RefreshFeeds(context.Context, []int64) (int, error) { return 0, nil }
+
 func (noopPuller) RefreshAll(context.Context) (int, error) { return 0, nil }
 
 func (noopPuller) Wake() {}

@@ -291,6 +291,36 @@ func (p *Puller) RefreshAll(ctx context.Context) (int, error) {
 	return count, nil
 }
 
+// RefreshFeeds triggers refresh for the given feed IDs and waits until all
+// started refresh jobs have completed. Unlike RefreshAll, it includes
+// suspended feeds because the caller explicitly selected them.
+func (p *Puller) RefreshFeeds(ctx context.Context, feedIDs []int64) (int, error) {
+	if len(feedIDs) == 0 {
+		return 0, nil
+	}
+
+	feeds, err := p.store.ListFeeds()
+	if err != nil {
+		return 0, fmt.Errorf("list feeds: %w", err)
+	}
+
+	selected := make(map[int64]struct{}, len(feedIDs))
+	for _, id := range feedIDs {
+		selected[id] = struct{}{}
+	}
+
+	count, err := p.dispatchFeeds(ctx, feeds, func(feed *model.Feed) bool {
+		_, ok := selected[feed.ID]
+		return ok
+	})
+	if err != nil {
+		return count, err
+	}
+
+	p.Wake()
+	return count, nil
+}
+
 func (p *Puller) dispatchFeeds(ctx context.Context, feeds []*model.Feed, shouldPull func(*model.Feed) bool) (int, error) {
 	count := 0
 	var wg sync.WaitGroup

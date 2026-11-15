@@ -57,6 +57,14 @@ management (`/feeds`) hosts grouped feed/group CRUD, refresh-all, and
 OPML import/export. Component names map to these areas directly — browse
 `frontend/src/components/` for the implementation.
 
+Feed management also supports transient multiselect. Hover/focus checkboxes,
+Ctrl/Cmd-click, Shift-click ranges, and touch long-press start or adjust the
+selection; Escape exits it. “Select all visible” covers feeds matching the
+active search/status filter, and changing either filter clears the selection.
+Refreshing selected feeds submits one batch request and clears the selection
+once the server accepts it; paused feeds are included because selection is an
+explicit manual refresh.
+
 ## 5. Data flow
 
 - API layer lives in `frontend/src/lib/api/`

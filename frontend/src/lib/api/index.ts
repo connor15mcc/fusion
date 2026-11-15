@@ -77,7 +77,8 @@ export const feedAPI = {
   validate: (data: ValidateFeedRequest) =>
     api.post<APIResponse<ValidateFeedResponse>>("/feeds/validate", data),
 
-  refresh: () => api.post<void>("/feeds/refresh"),
+  refresh: (ids: number[] | null) =>
+    api.post<void>("/feeds/refresh", ids ? { ids } : undefined),
 
   batchCreate: (data: BatchCreateFeedsRequest) =>
     api.post<APIResponse<BatchCreateFeedsResponse>>("/feeds/batch", data),
