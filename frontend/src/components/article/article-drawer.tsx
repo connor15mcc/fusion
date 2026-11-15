@@ -193,8 +193,8 @@ export function ArticleDrawer() {
         {article && (
           <div className="flex h-full flex-col">
             {/* Header */}
-            <div className="flex items-center justify-between border-b px-4 py-3 sm:px-6">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-end border-b px-4 py-3 sm:justify-between sm:px-6">
+              <div className="hidden items-center gap-2 sm:flex">
                 <Button
                   variant="outline"
                   size="sm"
@@ -319,26 +319,101 @@ export function ArticleDrawer() {
               </article>
             </ScrollArea>
 
-            {/* Footer - Navigation */}
-            <div className="flex items-center justify-between border-t px-4 py-3 sm:px-6">
+            {/* Footer - Navigation and actions */}
+            <div className="flex items-center justify-between gap-2 border-t px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-6 sm:py-3">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={goToPrevious}
                 disabled={!hasPrevious()}
-                className="h-auto gap-1.5 px-3 py-2 text-[13px] font-medium text-muted-foreground"
+                aria-label={t("common.previous")}
+                title={t("common.previous")}
+                className="size-11 px-0 text-[13px] font-medium text-muted-foreground sm:h-auto sm:w-auto sm:gap-1.5 sm:px-3 sm:py-2"
               >
                 <ChevronLeft className="h-4 w-4" />
-                {t("common.previous")}
+                <span className="hidden sm:inline">{t("common.previous")}</span>
               </Button>
+              <div className="flex items-center gap-1 sm:hidden">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleToggleRead}
+                  disabled={!canToggleRead}
+                  aria-label={
+                    (readArticle?.unread ?? false)
+                      ? t("article.action.markRead")
+                      : t("article.action.markUnread")
+                  }
+                  title={
+                    (readArticle?.unread ?? false)
+                      ? t("article.action.markRead")
+                      : t("article.action.markUnread")
+                  }
+                  className="size-11 px-0 text-muted-foreground"
+                >
+                  {(readArticle?.unread ?? false) ? (
+                    <Circle className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <CircleCheck className="h-4 w-4 text-primary" />
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleToggleStar}
+                  aria-label={
+                    starred
+                      ? t("article.action.unstar")
+                      : t("article.action.star")
+                  }
+                  title={
+                    starred
+                      ? t("article.action.unstar")
+                      : t("article.action.star")
+                  }
+                  className="size-11 px-0 text-muted-foreground"
+                >
+                  <Star
+                    className={`h-4 w-4 ${starred ? "fill-current text-amber-500" : ""}`}
+                  />
+                </Button>
+                {safeArticleLink ? (
+                  <a
+                    href={safeArticleLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={t("article.action.original")}
+                    title={t("article.action.original")}
+                    className={cn(
+                      buttonVariants({ variant: "outline", size: "sm" }),
+                      "size-11 px-0 text-muted-foreground",
+                    )}
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled
+                    aria-label={t("article.action.original")}
+                    title={t("article.action.original")}
+                    className="size-11 px-0 text-muted-foreground"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={goToNext}
                 disabled={!hasNext()}
-                className="h-auto gap-1.5 px-3 py-2 text-[13px] font-medium text-muted-foreground"
+                aria-label={t("common.next")}
+                title={t("common.next")}
+                className="size-11 px-0 text-[13px] font-medium text-muted-foreground sm:h-auto sm:w-auto sm:gap-1.5 sm:px-3 sm:py-2"
               >
-                {t("common.next")}
+                <span className="hidden sm:inline">{t("common.next")}</span>
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>

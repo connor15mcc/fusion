@@ -57,6 +57,9 @@ management (`/feeds`) hosts grouped feed/group CRUD, refresh-all, and
 OPML import/export. Component names map to these areas directly — browse
 `frontend/src/components/` for the implementation.
 
+On narrow screens, the article drawer's primary actions sit in the bottom
+bar so they stay within thumb reach; wider layouts keep them in the header.
+
 ## 5. Data flow
 
 - API layer lives in `frontend/src/lib/api/`

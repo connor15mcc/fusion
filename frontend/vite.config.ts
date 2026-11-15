@@ -25,6 +25,7 @@ export default defineConfig({
     },
   },
   server: {
+    allowedHosts: ["tower"],
     proxy: {
       "/api": {
         target: "http://localhost:8080",
