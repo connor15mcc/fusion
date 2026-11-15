@@ -84,6 +84,20 @@ The "still undoable" state is scoped to the exact list being viewed (feed + grou
 - Leaving the list — switching filter or feed/group scope, or unmounting the reading view — clears the pins and commits: read rows drop out of the unread view without a refetch. The all view still shows them, so undo remains possible after the fact.
 - Keyboard navigation is unaffected: pinned gray rows stay in the article id list, keeping `j`/`k` indices stable.
 
+### Multiselect read
+
+Long-pressing an unread row on touch/pen enters selection mode. On desktop,
+the hover/focus checkbox, `Ctrl`/`Cmd`-click, and `Shift`-click range selection
+provide the same entry point. Selection is transient UI state scoped to the
+current list identity and is cleared by leaving the list, cancelling, or
+pressing `Esc`; it does not appear in the URL.
+
+Selection covers rows already loaded in the current list. "Select all loaded"
+does not fetch more pages, and only unread rows with a positive item id can be
+selected — read rows and orphan bookmarks in the starred view are excluded.
+Batch marking reuses the unread-view pins above, so selected rows gray out for
+in-place undo until the user leaves the list.
+
 Known edge: marking an item unread from the all view does not insert it into an already-cached unread list; cache staleness/refetch covers it eventually.
 
 Star/bookmark changes are deliberately the opposite pattern: un-starring removes the row from the starred view immediately (optimistic removal from every bookmark list cache, then invalidation to reconcile — see `useDeleteBookmark`), because a bookmark toggle is its own undo and needs no lingering row. Only read-state changes defer list membership.
