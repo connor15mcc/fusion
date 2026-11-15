@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -141,6 +142,88 @@ func TestRefreshAllWaitsForRunningJobs(t *testing.T) {
 	for _, feed := range feeds {
 		if feed.FetchState.LastSuccessAt <= 0 {
 			t.Fatalf("feed %d last_success_at = %d, want > 0", feed.ID, feed.FetchState.LastSuccessAt)
+		}
+	}
+}
+
+func TestRefreshFeedsOnlyDispatchesSelectedIncludingSuspended(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	st, err := store.New(dbPath)
+	if err != nil {
+		t.Fatalf("create store: %v", err)
+	}
+	defer st.Close()
+
+	var mu sync.Mutex
+	requestedPaths := []string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requestedPaths = append(requestedPaths, r.URL.Path)
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>Demo</title><link>https://example.com</link>
+<item><guid>%s</guid><title>Item</title><link>https://example.com%s</link></item>
+</channel></rss>`, r.URL.Path, r.URL.Path)
+	}))
+	defer server.Close()
+
+	feedA, err := st.CreateFeed(1, "Feed A", server.URL+"/a", "", "", nil)
+	if err != nil {
+		t.Fatalf("create feed A: %v", err)
+	}
+	feedB, err := st.CreateFeed(1, "Feed B", server.URL+"/b", "", "", nil)
+	if err != nil {
+		t.Fatalf("create feed B: %v", err)
+	}
+	if _, err := st.CreateFeed(1, "Feed C", server.URL+"/c", "", "", nil); err != nil {
+		t.Fatalf("create feed C: %v", err)
+	}
+	suspended := true
+	if err := st.UpdateFeed(feedB.ID, store.UpdateFeedParams{Suspended: &suspended}); err != nil {
+		t.Fatalf("suspend feed B: %v", err)
+	}
+
+	p := New(st, &config.Config{
+		PullInterval:      1800,
+		PullTimeout:       5,
+		PullConcurrency:   1,
+		PullMaxBackoff:    604800,
+		AllowPrivateFeeds: true,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	count, err := p.RefreshFeeds(ctx, []int64{feedA.ID, feedB.ID})
+	if err != nil {
+		t.Fatalf("refresh feeds: %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("refresh count = %d, want 2", count)
+	}
+
+	mu.Lock()
+	got := append([]string(nil), requestedPaths...)
+	mu.Unlock()
+	if len(got) != 2 || got[0] != "/a" || got[1] != "/b" {
+		t.Fatalf("requested paths = %v, want [/a /b]", got)
+	}
+
+	feeds, err := st.ListFeeds()
+	if err != nil {
+		t.Fatalf("list feeds: %v", err)
+	}
+	for _, feed := range feeds {
+		if feed.ID == feedA.ID || feed.ID == feedB.ID {
+			if feed.FetchState.LastSuccessAt <= 0 {
+				t.Fatalf("selected feed %d last_success_at = %d, want > 0", feed.ID, feed.FetchState.LastSuccessAt)
+			}
+			continue
+		}
+		if feed.FetchState.LastSuccessAt != 0 {
+			t.Fatalf("unselected feed %d was refreshed", feed.ID)
 		}
 	}
 }

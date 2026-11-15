@@ -23,6 +23,7 @@ type Handler struct {
 	allowAnonAPI bool   // true when both password and OIDC auth are disabled
 	puller       interface {
 		RefreshFeed(ctx context.Context, feedID int64) error
+		RefreshFeeds(ctx context.Context, feedIDs []int64) (int, error)
 		RefreshAll(ctx context.Context) (int, error)
 		Wake()
 	}
@@ -32,12 +33,13 @@ type Handler struct {
 	limiter   *loginLimiter
 	lastSweep int64
 
-	refreshAllMu      sync.Mutex
-	refreshAllRunning bool
+	refreshMu      sync.Mutex
+	refreshRunning bool
 }
 
 func New(store *store.Store, config *config.Config, puller interface {
 	RefreshFeed(ctx context.Context, feedID int64) error
+	RefreshFeeds(ctx context.Context, feedIDs []int64) (int, error)
 	RefreshAll(ctx context.Context) (int, error)
 	Wake()
 }) (*Handler, error) {

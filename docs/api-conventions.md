@@ -68,7 +68,9 @@ Three cases return the status with an empty body instead: unknown routes
 - `204` — body-less success: mark items read/unread, all deletes, logout,
   and the `GET /api/sessions` validity probe (valid → 204, invalid → 401)
 - `202` — feed refresh requests (`/feeds/refresh`, `/feeds/{id}/refresh`):
-  refresh happens asynchronously, no body
+  refresh happens asynchronously, no body. `POST /feeds/refresh` accepts an
+  optional `{"ids": [...]}` body; without it, every non-suspended feed is
+  refreshed. With IDs, exactly those feeds are refreshed, including paused ones.
 
 ## Request quirks worth knowing
 

@@ -117,7 +117,7 @@ export function useDeleteFeed() {
 export function useRefreshFeeds() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => feedAPI.refresh(),
+    mutationFn: (ids: number[] | null) => feedAPI.refresh(ids),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.feeds.all });
       qc.invalidateQueries({ queryKey: queryKeys.items.all });

@@ -1,15 +1,18 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createLazyFileRoute } from "@tanstack/react-router";
 import {
   ChevronDown,
   Download,
   Folder,
   ListFilter,
+  ListChecks,
+  Loader2,
   Plus,
   RefreshCw,
   Rss,
   Search,
   Upload,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/layout/app-layout";
@@ -36,6 +39,8 @@ import { feedAPI, groupAPI } from "@/lib/api";
 import type { Feed, Group } from "@/lib/api";
 import { generateOPML, downloadFile } from "@/lib/opml";
 import { useI18n } from "@/lib/i18n";
+import { isSelectableFeed } from "@/lib/feed-selection";
+import { useSelection } from "@/hooks/use-selection";
 import { cn } from "@/lib/utils";
 import {
   useFeedLookup,
@@ -67,10 +72,18 @@ function FeedsPage() {
     setImportOpmlOpen,
     setAddFeedOpen,
     setAddGroupOpen,
+    isSearchOpen,
+    isSettingsOpen,
+    isAddGroupOpen,
+    isAddFeedOpen,
+    isEditFeedOpen,
+    isImportOpmlOpen,
+    isShortcutsOpen,
   } = useUIStore();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const filterKey = `${searchQuery}\u0000${statusFilter}`;
   const [isExporting, setIsExporting] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<number>>(
     new Set(),
@@ -119,6 +132,68 @@ function FeedsPage() {
     }));
   }, [groups, searchQuery, statusFilter, getFeedsByGroup]);
 
+  const visibleFeeds = useMemo(
+    () => groupedFeeds.flatMap(({ feeds: groupFeeds }) => groupFeeds),
+    [groupedFeeds],
+  );
+  const {
+    selectedIds: selectedFeedIds,
+    selectionMode,
+    allSelected: allVisibleSelected,
+    clearSelection,
+    startSelection: startFeedSelection,
+    toggleSelection: toggleFeedSelection,
+    toggleSelectAll: toggleSelectAllVisible,
+  } = useSelection({
+    items: visibleFeeds,
+    isSelectable: isSelectableFeed,
+    resetKey: filterKey,
+    pruneItems: feeds,
+    toggleAllMode: "toggle-visible",
+    startMode: "replace",
+  });
+
+  useEffect(() => {
+    if (!selectionMode) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (
+        isSearchOpen ||
+        isSettingsOpen ||
+        isAddGroupOpen ||
+        isAddFeedOpen ||
+        isEditFeedOpen ||
+        isImportOpmlOpen ||
+        isShortcutsOpen ||
+        editingGroupId !== null ||
+        refreshConfirmOpen ||
+        deletingGroup !== null
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      clearSelection();
+    };
+
+    document.addEventListener("keydown", handleKeyDown, true);
+    return () => document.removeEventListener("keydown", handleKeyDown, true);
+  }, [
+    clearSelection,
+    deletingGroup,
+    editingGroupId,
+    isAddFeedOpen,
+    isAddGroupOpen,
+    isEditFeedOpen,
+    isImportOpmlOpen,
+    isSearchOpen,
+    isSettingsOpen,
+    isShortcutsOpen,
+    refreshConfirmOpen,
+    selectionMode,
+  ]);
+
   const toggleGroup = (groupId: number) => {
     setCollapsedGroups((prev) => {
       const next = new Set(prev);
@@ -133,10 +208,23 @@ function FeedsPage() {
 
   const handleRefreshAll = async () => {
     try {
-      await refreshFeedsMutation.mutateAsync();
+      await refreshFeedsMutation.mutateAsync(null);
       toast.success(t("feeds.toast.refreshing"));
     } catch {
       toast.error(t("feeds.toast.refreshFailed"));
+    }
+  };
+
+  const handleRefreshSelected = async () => {
+    if (selectedFeedIds.size === 0) return;
+
+    const selectedCount = selectedFeedIds.size;
+    try {
+      await refreshFeedsMutation.mutateAsync([...selectedFeedIds]);
+      clearSelection();
+      toast.success(t("feeds.selection.refreshed", { count: selectedCount }));
+    } catch {
+      toast.error(t("feeds.selection.refreshFailed"));
     }
   };
 
@@ -222,16 +310,87 @@ function FeedsPage() {
     <AppLayout>
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
         <ContentHeader>
-          <div className="flex items-center gap-1">
-            <SidebarTrigger />
-            <h1 className="text-lg font-semibold">{t("feeds.header")}</h1>
-          </div>
-          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <Rss className="h-4 w-4" />
-            <span className="font-medium">
-              {t("feeds.count", { count: feeds.length })}
-            </span>
-          </div>
+          {selectionMode ? (
+            <>
+              <div className="flex min-w-0 items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={clearSelection}
+                  aria-label={t("feeds.selection.cancel")}
+                  title={t("feeds.selection.cancel")}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+                <span className="truncate text-sm font-medium">
+                  {t("feeds.selection.count", { count: selectedFeedIds.size })}
+                </span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={toggleSelectAllVisible}
+                  disabled={visibleFeeds.length === 0}
+                  className="hidden gap-1.5 text-xs sm:inline-flex"
+                >
+                  <ListChecks className="h-4 w-4" />
+                  {allVisibleSelected
+                    ? t("feeds.selection.clear")
+                    : t("feeds.selection.selectAllVisible")}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={toggleSelectAllVisible}
+                  disabled={visibleFeeds.length === 0}
+                  className="sm:hidden"
+                  aria-label={
+                    allVisibleSelected
+                      ? t("feeds.selection.clear")
+                      : t("feeds.selection.selectAllVisible")
+                  }
+                  title={
+                    allVisibleSelected
+                      ? t("feeds.selection.clear")
+                      : t("feeds.selection.selectAllVisible")
+                  }
+                >
+                  <ListChecks className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleRefreshSelected}
+                  disabled={refreshFeedsMutation.isPending}
+                  className="gap-1.5 text-xs"
+                  aria-label={t("feeds.selection.refresh")}
+                  title={t("feeds.selection.refresh")}
+                >
+                  {refreshFeedsMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                  <span className="hidden sm:inline">
+                    {t("feeds.selection.refresh")}
+                  </span>
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-1">
+                <SidebarTrigger />
+                <h1 className="text-lg font-semibold">{t("feeds.header")}</h1>
+              </div>
+              <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                <Rss className="h-4 w-4" />
+                <span className="font-medium">
+                  {t("feeds.count", { count: feeds.length })}
+                </span>
+              </div>
+            </>
+          )}
         </ContentHeader>
 
         <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
@@ -358,6 +517,8 @@ function FeedsPage() {
                       editingGroupName={editingGroupName}
                       isMobile={isMobile}
                       mobileErrorTooltipFeedId={mobileErrorTooltipFeedId}
+                      isSelectionMode={selectionMode}
+                      selectedFeedIds={selectedFeedIds}
                       onToggleGroup={toggleGroup}
                       onStartEditingGroup={startEditingGroup}
                       onChangeEditingGroupName={setEditingGroupName}
@@ -368,6 +529,8 @@ function FeedsPage() {
                       onOpenAddFeed={() => setAddFeedOpen(true)}
                       onOpenDeleteGroup={setDeletingGroup}
                       onOpenEditFeed={(feed) => setEditFeedOpen(true, feed)}
+                      onToggleFeedSelection={toggleFeedSelection}
+                      onStartFeedSelection={startFeedSelection}
                       onChangeMobileErrorTooltipFeedId={setMobileErrorTooltipFeedId}
                       t={t}
                     />
